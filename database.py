@@ -47,7 +47,6 @@ def list_tasks():
     tasks = cursor.fetchall()
 
     conn.close()
-
     return tasks
 
 
