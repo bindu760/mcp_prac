@@ -1,5 +1,6 @@
 
 import sqlite3
+from contextlib import contextmanager
 
 DB_NAME = "tasks.db"
 
@@ -8,73 +9,74 @@ def get_connection():
     return sqlite3.connect(DB_NAME)
 
 
-def create_table():
+@contextmanager
+def db_connection():
     conn = get_connection()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            completed BOOLEAN DEFAULT 0
-        )
-    """)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
-    conn.commit()
-    conn.close()
+
+def create_table():
+    with db_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                completed BOOLEAN DEFAULT 0
+            )
+        """)
 
 
 def add_task(title):
-    conn = get_connection()
-    cursor = conn.cursor()
+    title = title.strip()
 
-    cursor.execute(
-        "INSERT INTO tasks (title) VALUES (?)",
-        (title,)
-    )
+    if not title:
+        return "Error: Task title cannot be empty."
 
-    conn.commit()
-    conn.close()
+    with db_connection() as conn:
+        conn.execute(
+            "INSERT INTO tasks (title) VALUES (?)",
+            (title,)
+        )
 
     return f"Task added: {title}"
 
 
 def list_tasks():
-    conn = get_connection()
-    cursor = conn.cursor()
+    with db_connection() as conn:
+        cursor = conn.execute(
+            "SELECT id, title, completed FROM tasks"
+        )
+        tasks = cursor.fetchall()
 
-    cursor.execute("SELECT id, title, completed FROM tasks")
-    tasks = cursor.fetchall()
-
-    conn.close()
     return tasks
 
 
 def complete_task(task_id):
-    conn = get_connection()
-    cursor = conn.cursor()
+    with db_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE tasks SET completed = 1 WHERE id = ?",
+            (task_id,)
+        )
 
-    cursor.execute(
-        "UPDATE tasks SET completed = 1 WHERE id = ?",
-        (task_id,)
-    )
+        if cursor.rowcount == 0:
+            return f"Error: Task {task_id} not found."
 
-    conn.commit()
-    conn.close()
-
-    return f"Task {task_id} marked as completed"
+    return f"Task {task_id} marked as completed."
 
 
 def delete_task(task_id):
-    conn = get_connection()
-    cursor = conn.cursor()
+    with db_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM tasks WHERE id = ?",
+            (task_id,)
+        )
 
-    cursor.execute(
-        "DELETE FROM tasks WHERE id = ?",
-        (task_id,)
-    )
+        if cursor.rowcount == 0:
+            return f"Error: Task {task_id} not found."
 
-    conn.commit()
-    conn.close()
-
-    return f"Task {task_id} deleted"
+    return f"Task {task_id} deleted."
